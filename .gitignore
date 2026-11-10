@@ -19,3 +19,13 @@ dist
 *.njsproj
 *.sln
 *.sw?
+
+# HBuilderX / uni-app
+.hbuilderx
+unpackage
+*.local
+.DS_Store
+
+# Windows / Mac
+Thumbs.db
+Desktop.ini
