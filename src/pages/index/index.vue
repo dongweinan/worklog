@@ -94,10 +94,12 @@
     <view class="glass-card">
       <view class="glass-head">
         <text class="glass-title">考勤记录</text>
-        <text class="glass-count">共 {{ list.length }} 天</text>
+        <view class="head-right">
+          <text class="glass-more" @tap="goRecord">查看更多 ›</text>
+        </view>
       </view>
-      <view class="entry-list" v-if="list.length">
-        <view class="entry-row" v-for="item in list" :key="item.date">
+      <view class="entry-list" v-if="displayList.length">
+        <view class="entry-row" v-for="item in displayList" :key="item.date">
           <view class="entry-date-col">
             <text class="entry-date">{{ dayNum(item.date) }}</text>
             <text class="entry-week">{{ weekOf(item.date) }}</text>
@@ -162,6 +164,10 @@ export default {
     currentAttendance() {
       return this.attendanceOptions[this.attendanceIndex]
     },
+    // 首页考勤记录仅展示最近 3 条（list 已按日期倒序）
+    displayList() {
+      return this.list.slice(0, 3)
+    },
     dueDays() {
       return this.dueOverride !== ''
         ? this.dueOverride
@@ -170,7 +176,7 @@ export default {
     days() {
       return this.list.reduce((sum, r) => {
         const a = r.attendance
-        // 纯加班/半天按比例，全天为 1；无字段的历史记录按 1 天算
+        // 加班/半天按比例，全天为 1；无字段的历史记录按 1 天算
         if (a === 0) return sum
         if (a === 0.5) return sum + 0.5
         return sum + (r.onDutyTime ? 1 : 0)
@@ -206,7 +212,12 @@ export default {
       let total = 0
       this.list.forEach((r) => {
         const h = Number(r.workHours || 0)
-        if (h > this.standardHours) total += h - this.standardHours
+        // 出勤类型为「加班」时，当天全部工时均计入加班时长
+        if (r.attendance === 0) {
+          total += h
+        } else if (h > this.standardHours) {
+          total += h - this.standardHours
+        }
       })
       return total
     },
@@ -224,6 +235,10 @@ export default {
     this.refresh()
   },
   methods: {
+    goRecord() {
+      // 记录页是 tabBar 页面，需用 switchTab 跳转
+      uni.switchTab({ url: '/pages/record/record' })
+    },
     refresh() {
       this.list = getMonthRecords(this.year, this.month)
       this.dueOverride = getDueOverride(this.year, this.month)
@@ -281,7 +296,7 @@ export default {
       return t || '--:--'
     },
     attText(a) {
-      if (a === 0) return '纯加班'
+      if (a === 0) return '加班'
       if (a === 0.5) return '半天'
       return '全天'
     },
@@ -327,9 +342,16 @@ export default {
   font-size: 24rpx;
   color: #8b94a3;
 }
-.glass-count {
-  font-size: 22rpx;
-  color: #8b94a3;
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+.glass-more {
+  font-size: 24rpx;
+  color: #7a95c0;
+  font-weight: 600;
+  padding: 8rpx 0 8rpx 8rpx;
 }
 
 /* 本月概况 */

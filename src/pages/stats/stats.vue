@@ -80,7 +80,8 @@ export default {
       )
     },
     days() {
-      return this.list.filter((r) => r.onDutyTime).length
+      // 加班（attendance===0）不算出勤
+      return this.list.filter((r) => r.onDutyTime && r.attendance !== 0).length
     },
     totalHours() {
       return this.list
@@ -95,7 +96,12 @@ export default {
       let total = 0
       this.list.forEach((r) => {
         const h = Number(r.workHours || 0)
-        if (h > this.standardHours) total += h - this.standardHours
+        // 出勤类型为「加班」时，当天全部工时均计入加班时长
+        if (r.attendance === 0) {
+          total += h
+        } else if (h > this.standardHours) {
+          total += h - this.standardHours
+        }
       })
       return total.toFixed(1)
     },

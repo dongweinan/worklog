@@ -254,17 +254,17 @@ export default {
   background: rgba(255, 255, 255, 0.72);
   border: 1rpx solid rgba(255, 255, 255, 0.95);
   border-radius: 28rpx;
-  padding: 36rpx 34rpx;
+  padding: 28rpx 34rpx;
   box-shadow: 0 8rpx 28rpx rgba(96, 120, 160, 0.1);
   backdrop-filter: blur(20rpx);
   -webkit-backdrop-filter: blur(20rpx);
-  margin-bottom: 26rpx;
+  margin-bottom: 24rpx;
 }
 .glass-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 12rpx;
+  margin-bottom: 6rpx;
 }
 .glass-title {
   font-size: 28rpx;
@@ -277,16 +277,16 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16rpx 10rpx 8rpx;
+  padding: 8rpx 10rpx 0;
 }
 .month-arrow {
-  font-size: 44rpx;
+  font-size: 40rpx;
   color: #7a95c0;
-  padding: 0 30rpx;
+  padding: 0 24rpx;
   line-height: 1;
 }
 .month-title {
-  font-size: 32rpx;
+  font-size: 30rpx;
   font-weight: 700;
   letter-spacing: 2rpx;
   color: #2a333d;
@@ -297,7 +297,7 @@ export default {
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  padding: 24rpx 0 30rpx;
+  padding: 18rpx 0 22rpx;
 }
 .due-big {
   font-size: 64rpx;
@@ -324,7 +324,7 @@ export default {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  padding: 24rpx 0 30rpx;
+  padding: 18rpx 0 22rpx;
 }
 .std-value {
   font-size: 64rpx;
@@ -344,7 +344,7 @@ export default {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  padding: 24rpx 0 30rpx;
+  padding: 18rpx 0 22rpx;
 }
 .goal-value {
   font-size: 64rpx;
@@ -364,7 +364,7 @@ export default {
   font-size: 24rpx;
   color: #5b6572;
   text-align: center;
-  padding: 30rpx 0 34rpx;
+  padding: 18rpx 0 22rpx;
   line-height: 1.6;
 }
 .lunch-num {
@@ -384,14 +384,14 @@ export default {
   gap: 18rpx;
 }
 .pill-btn {
-  min-width: 200rpx;
-  height: 76rpx;
-  line-height: 76rpx;
+  min-width: 180rpx;
+  height: 64rpx;
+  line-height: 64rpx;
   text-align: center;
-  border-radius: 38rpx;
+  border-radius: 32rpx;
   background: rgba(120, 150, 200, 0.9);
   color: #ffffff;
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: 600;
 }
 .pill-btn.ghost {
