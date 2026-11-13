@@ -7,7 +7,7 @@ const ADJUST_KEY = 'worklog_adjust'
 // ---------- 后端数据缓存（内存态，页面加载时由 api 拉取）----------
 let recordsCache = {} // { 'YYYY-MM-DD': record }
 let settingsCache = { standardHours: 8, lunchHours: 1, goalHours: 10 }
-let dueOverrideCache = {} // { 'YYYY-MM': '21' }
+let dueOverrideCache = {} // { 'YYYY-MM': { value, source } }
 
 // ---------- 调休配置 ----------
 // 内置国定节假日表（依据国务院办公厅《关于2026年部分节假日安排的通知》）
@@ -96,34 +96,48 @@ export function calcDueDays(year, month) {
   return due
 }
 
-// 读取某月手动覆盖的应出勤天数（从后端读取，返回 '' 表示无覆盖）
+// 读取某月应出勤天数：后端有值（手动/自动兜底）则以后端为准并写入缓存与后端；
+// 后端无记录时，用前端节假日表自动计算兜底，并静默回写建行(source='auto')，保证后端统计有基准。
 export async function loadDueOverride(year, month) {
+  const key = `${year}-${month}`
   try {
-    const key = `${year}-${month}`
     const res = await DueOverrideApi.get(year, month)
-    dueOverrideCache[key] =
-      res && (res.value || res.value === 0) ? res.value : ''
+    const hasBackend = res && (res.value || res.value === 0)
+    if (hasBackend) {
+      dueOverrideCache[key] = {
+        value: String(res.value),
+        source: res.source === 'manual' ? 'manual' : 'auto',
+      }
+    } else {
+      const auto = String(calcDueDays(year, month))
+      dueOverrideCache[key] = { value: auto, source: 'auto' }
+      DueOverrideApi.save(year, month, auto, 'auto').catch(() => {})
+    }
   } catch (e) {
-    dueOverrideCache[`${year}-${month}`] = ''
+    if (!dueOverrideCache[key]) {
+      const auto = String(calcDueDays(year, month))
+      dueOverrideCache[key] = { value: auto, source: 'auto' }
+    }
   }
-  return dueOverrideCache[`${year}-${month}`]
+  return dueOverrideCache[key]
 }
 
-// 读取某月手动覆盖值（同步读缓存）
+// 读取某月应出勤天数（同步读缓存，返回 { value, source }）
 export function getDueOverride(year, month) {
-  return dueOverrideCache[`${year}-${month}`] || ''
+  const hit = dueOverrideCache[`${year}-${month}`]
+  return hit || { value: '', source: '' }
 }
 
-// 设置某月应出勤覆盖值（传空则清除覆盖，与后端 PUT 同步）
+// 设置某月应出勤覆盖值（传空则清除覆盖，与后端 PUT 同步；手动修改时 source='manual'）
 export async function setDueOverride(year, month, value) {
   const key = `${year}-${month}`
   const finalValue = value === '' || value == null ? '' : String(value)
   try {
-    await DueOverrideApi.save(year, month, finalValue)
+    await DueOverrideApi.save(year, month, finalValue, 'manual')
     if (finalValue === '') {
       delete dueOverrideCache[key]
     } else {
-      dueOverrideCache[key] = finalValue
+      dueOverrideCache[key] = { value: finalValue, source: 'manual' }
     }
   } catch (e) {
     uni.showToast({ title: '保存失败', icon: 'none' })
@@ -238,15 +252,26 @@ export function calcWorkHours(onTime, offTime, fullDay = true) {
 }
 
 // 从后端拉取设置，更新缓存
+// 策略：后端有值则以后端为准；后端无记录（从未保存过）时，
+// 用前端默认值兜底，并回写一次默认值给后端建行，保证后端统计始终有据可依。
 export async function loadSettings() {
+  const DEFAULTS = { standardHours: 8, lunchHours: 1, goalHours: 10 }
   try {
     const res = await SettingsApi.get()
-    settingsCache = Object.assign(
-      { standardHours: 8, lunchHours: 1, goalHours: 10 },
-      res || {},
-    )
+    const hasBackend =
+      res &&
+      (res.standardHours != null ||
+        res.lunchHours != null ||
+        res.goalHours != null)
+    if (hasBackend) {
+      settingsCache = Object.assign({}, DEFAULTS, res)
+    } else {
+      // 后端暂无设置记录：以前端默认值兜底，并回写建行
+      settingsCache = Object.assign({}, DEFAULTS)
+      SettingsApi.save(Object.assign({}, settingsCache)).catch(() => {})
+    }
   } catch (e) {
-    settingsCache = { standardHours: 8, lunchHours: 1, goalHours: 10 }
+    settingsCache = Object.assign({}, DEFAULTS)
   }
   return settingsCache
 }

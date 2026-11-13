@@ -206,7 +206,7 @@ export default {
       year: now.getFullYear(),
       month: now.getMonth() + 1,
       list: [],
-      dueOverride: '',
+      dueOverride: { value: '', source: '' },
       attendanceOptions: ['加班', '半天', '全天'],
       attendanceIndex: 2,
       form: {
@@ -230,8 +230,8 @@ export default {
       return this.list.slice(0, 3)
     },
     dueDays() {
-      return this.dueOverride !== ''
-        ? this.dueOverride
+      return this.dueOverride.value !== ''
+        ? this.dueOverride.value
         : calcDueDays(this.year, this.month)
     },
     days() {

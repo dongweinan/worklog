@@ -122,7 +122,10 @@ export const DueOverrideApi = {
   // GET /api/due-override?year=2026&month=11 -> { value: '21' | null }
   get: (year, month) =>
     request('GET', `/api/due-override?year=${year}&month=${month}`),
-  // PUT /api/due-override?year=2026&month=11 { value }
-  save: (year, month, value) =>
-    request('PUT', `/api/due-override?year=${year}&month=${month}`, { value }),
+  // PUT /api/due-override?year=2026&month=11 { value, source }
+  save: (year, month, value, source) =>
+    request('PUT', `/api/due-override?year=${year}&month=${month}`, {
+      value,
+      source,
+    }),
 }

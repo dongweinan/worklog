@@ -74,17 +74,18 @@ Authorization: Bearer <token>
 | goal_hours | DECIMAL(5,1) | 默认 10 | 每日达标工时 |
 | updated_at | DATETIME | 更新时间 | 更新时间 |
 
-### 4. due_override（应出勤天数手动覆盖表）
+### 4. due_override（应出勤天数覆盖表）
 | 字段 | 类型 | 约束 | 说明 |
 | ---- | ---- | ---- | ---- |
 | user_id | BIGINT | 索引 | 归属用户 |
 | month | VARCHAR(7) | 非空 | 月份，格式 `YYYY-MM` |
-| value | VARCHAR(10) | 非空 | 手动设置的应出勤天数（字符串，如 `'21'`） |
+| value | VARCHAR(10) | 非空 | 应出勤天数（字符串，如 `'21'`） |
+| source | VARCHAR(10) | 默认 `'manual'` | `manual`=用户手动设置；`auto`=前端节假日表自动兜底 |
 | created_at | DATETIME | 默认当前时间 | 创建时间 |
 | updated_at | DATETIME | 更新时间 | 更新时间 |
 
 > 唯一约束：`(user_id, month)` —— 每用户每月一条。
-> 应出勤天数的「自动计算」逻辑在前端完成，后端只负责存取该覆盖值。无覆盖时该月无记录。
+> 应出勤天数分两种情况：用户手动设置时 `source='manual'`；用户从未设置时，前端会用节假日表自动算出结果回写一行 `source='auto'`，保证后端每月都有基准可供统计。前后端统一以后端 value 为准。
 
 ---
 
@@ -191,7 +192,7 @@ res 200:
 GET /api/due-override?year=2026&month=11
 
 res 200:
-{ "value": "21" }        // 空串 "" 或 null 表示无覆盖
+{ "value": "21", "source": "manual" }   // value 空串 "" 或 null 表示无记录；source 为 manual | auto | ""
 ```
 
 ### 8. 保存应出勤覆盖值
@@ -200,7 +201,9 @@ PUT /api/due-override?year=2026&month=11
 Content-Type: application/json
 
 req:
-{ "value": "21" }        // 传空串 "" 或 null 表示清除覆盖，应删除该行
+{ "value": "21", "source": "manual" }
+// value 传空串 "" 或 null 表示清除覆盖，应删除该行
+// source 可选：'manual'（用户手动）默认；省略或非 'manual' 时按 'auto' 处理（前端节假日表自动兜底）
 
 res 200:
 { "ok": true }

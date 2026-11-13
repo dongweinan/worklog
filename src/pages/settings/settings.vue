@@ -119,7 +119,7 @@ export default {
     return {
       year: now.getFullYear(),
       month: now.getMonth() + 1,
-      override: '',
+      override: { value: '', source: '' },
       standardHours: 8,
       lunchHours: 1,
       goalHours: 10,
@@ -130,12 +130,12 @@ export default {
       return `${this.year}年${this.month}月`
     },
     displayDue() {
-      return this.override !== ''
-        ? this.override
+      return this.override.value !== ''
+        ? this.override.value
         : this.autoDue(this.year, this.month)
     },
     isOverridden() {
-      return this.override !== ''
+      return this.override.source === 'manual'
     },
   },
   onLoad() {
