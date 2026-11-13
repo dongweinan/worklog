@@ -20,14 +20,29 @@
       </view>
       <view class="stats-grid">
         <view class="stats-cell">
+          <image
+            class="st-icon"
+            src="/static/icons/clock.png"
+            mode="aspectFit"
+          ></image>
           <text class="st-value">{{ totalHours }}</text>
           <text class="st-label">累计工时</text>
         </view>
         <view class="stats-cell">
+          <image
+            class="st-icon"
+            src="/static/icons/gauge.png"
+            mode="aspectFit"
+          ></image>
           <text class="st-value">{{ avgHours }}</text>
           <text class="st-label">日均工时</text>
         </view>
         <view class="stats-cell">
+          <image
+            class="st-icon"
+            src="/static/icons/bolt.png"
+            mode="aspectFit"
+          ></image>
           <text class="st-value">{{ overtimeText }}</text>
           <text class="st-label">加班</text>
         </view>
@@ -56,7 +71,12 @@
 </template>
 
 <script>
-import { getMonthRecords, getSettings } from '@/utils/worklog.js'
+import {
+  getMonthRecords,
+  loadMonthRecords,
+  getSettings,
+  loadSettings,
+} from '@/utils/worklog.js'
 
 export default {
   data() {
@@ -128,15 +148,14 @@ export default {
         .reverse()
     },
   },
-  onLoad() {
-    this.standardHours = getSettings().standardHours || 8
-    this.load()
-  },
   onShow() {
     this.load()
   },
   methods: {
-    load() {
+    async load() {
+      await loadMonthRecords(this.year, this.month)
+      await loadSettings()
+      this.standardHours = getSettings().standardHours || 8
       this.list = getMonthRecords(this.year, this.month)
     },
     changeMonth(delta) {
@@ -242,6 +261,12 @@ export default {
   font-weight: 600;
   color: #2a333d;
   letter-spacing: -1rpx;
+}
+.st-icon {
+  display: block;
+  width: 40rpx;
+  height: 40rpx;
+  margin: 0 auto 10rpx;
 }
 .st-label {
   display: block;

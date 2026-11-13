@@ -3,7 +3,14 @@
     <!-- 应出勤天数设置 -->
     <view class="glass-card">
       <view class="glass-head">
-        <text class="glass-title">应出勤天数</text>
+        <view class="title-with-icon">
+          <image
+            class="title-icon"
+            src="/static/icons/calendar.png"
+            mode="aspectFit"
+          ></image>
+          <text class="glass-title">应出勤天数</text>
+        </view>
       </view>
 
       <view class="month-bar">
@@ -29,7 +36,14 @@
     <!-- 标准工时设置 -->
     <view class="glass-card">
       <view class="glass-head">
-        <text class="glass-title">每日标准工时</text>
+        <view class="title-with-icon">
+          <image
+            class="title-icon"
+            src="/static/icons/clock.png"
+            mode="aspectFit"
+          ></image>
+          <text class="glass-title">每日标准工时</text>
+        </view>
       </view>
       <view class="std-block">
         <text class="std-value">{{ standardHours }}</text>
@@ -43,7 +57,14 @@
     <!-- 达标工时设置 -->
     <view class="glass-card">
       <view class="glass-head">
-        <text class="glass-title">每日达标工时</text>
+        <view class="title-with-icon">
+          <image
+            class="title-icon"
+            src="/static/icons/target.png"
+            mode="aspectFit"
+          ></image>
+          <text class="glass-title">每日达标工时</text>
+        </view>
       </view>
       <view class="goal-block">
         <text class="goal-value">{{ goalHours }}</text>
@@ -57,7 +78,14 @@
     <!-- 午休扣除设置 -->
     <view class="glass-card">
       <view class="glass-head">
-        <text class="glass-title">午休扣除</text>
+        <view class="title-with-icon">
+          <image
+            class="title-icon"
+            src="/static/icons/coffee.png"
+            mode="aspectFit"
+          ></image>
+          <text class="glass-title">午休扣除</text>
+        </view>
         <text class="glass-sub">{{
           lunchHours > 0 ? '已开启' : '未扣除'
         }}</text>
@@ -77,8 +105,10 @@
 <script>
 import {
   getSettings,
+  loadSettings,
   saveSettings,
   getDueOverride,
+  loadDueOverride,
   setDueOverride,
   calcDueDays,
 } from '@/utils/worklog.js'
@@ -119,7 +149,9 @@ export default {
     autoDue(y, m) {
       return calcDueDays(y, m)
     },
-    load() {
+    async load() {
+      await loadDueOverride(this.year, this.month)
+      await loadSettings()
       this.override = getDueOverride(this.year, this.month)
       const s = getSettings()
       this.standardHours = s.standardHours || 8
@@ -150,24 +182,31 @@ export default {
         success(res) {
           if (!res.confirm) return
           const val = (res.content || '').trim()
-          if (val === '') {
-            setDueOverride(self.year, self.month, '')
-          } else {
-            const n = Number(val)
-            if (isNaN(n) || n < 0) {
-              uni.showToast({ title: '请输入有效数字', icon: 'none' })
-              return
+          const doSave = async () => {
+            if (val === '') {
+              await setDueOverride(self.year, self.month, '')
+            } else {
+              const n = Number(val)
+              if (isNaN(n) || n < 0) {
+                uni.showToast({ title: '请输入有效数字', icon: 'none' })
+                return
+              }
+              await setDueOverride(self.year, self.month, n)
             }
-            setDueOverride(self.year, self.month, n)
+            await self.load()
           }
-          self.load()
+          doSave()
         },
       })
     },
     resetDue() {
-      setDueOverride(this.year, this.month, '')
-      this.load()
-      uni.showToast({ title: '已恢复自动计算', icon: 'none' })
+      const self = this
+      const doReset = async () => {
+        await setDueOverride(this.year, this.month, '')
+        await self.load()
+        uni.showToast({ title: '已恢复自动计算', icon: 'none' })
+      }
+      doReset()
     },
     editStdHours() {
       const self = this
@@ -183,11 +222,14 @@ export default {
             uni.showToast({ title: '请输入有效数字', icon: 'none' })
             return
           }
-          const settings = getSettings()
-          settings.standardHours = n
-          saveSettings(settings)
-          self.standardHours = n
-          uni.showToast({ title: '已保存', icon: 'none' })
+          const doSave = async () => {
+            const settings = getSettings()
+            settings.standardHours = n
+            await saveSettings(settings)
+            self.standardHours = n
+            uni.showToast({ title: '已保存', icon: 'none' })
+          }
+          doSave()
         },
       })
     },
@@ -205,11 +247,14 @@ export default {
             uni.showToast({ title: '请输入有效数字', icon: 'none' })
             return
           }
-          const settings = getSettings()
-          settings.goalHours = n
-          saveSettings(settings)
-          self.goalHours = n
-          uni.showToast({ title: '已保存', icon: 'none' })
+          const doSave = async () => {
+            const settings = getSettings()
+            settings.goalHours = n
+            await saveSettings(settings)
+            self.goalHours = n
+            uni.showToast({ title: '已保存', icon: 'none' })
+          }
+          doSave()
         },
       })
     },
@@ -227,11 +272,14 @@ export default {
             uni.showToast({ title: '请输入有效数字', icon: 'none' })
             return
           }
-          const settings = getSettings()
-          settings.lunchHours = n
-          saveSettings(settings)
-          self.lunchHours = n
-          uni.showToast({ title: '已保存', icon: 'none' })
+          const doSave = async () => {
+            const settings = getSettings()
+            settings.lunchHours = n
+            await saveSettings(settings)
+            self.lunchHours = n
+            uni.showToast({ title: '已保存', icon: 'none' })
+          }
+          doSave()
         },
       })
     },
@@ -262,7 +310,7 @@ export default {
 }
 .glass-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 6rpx;
 }
@@ -271,6 +319,15 @@ export default {
   font-weight: 600;
   color: #2a333d;
   letter-spacing: 1rpx;
+}
+.title-with-icon {
+  display: flex;
+  align-items: center;
+}
+.title-icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-right: 12rpx;
 }
 
 .month-bar {

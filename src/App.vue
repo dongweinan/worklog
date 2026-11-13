@@ -1,14 +1,15 @@
 <script>
+import { login } from '@/utils/api.js'
+
 export default {
   onLaunch: function () {
-    console.log('App Launch')
+    // 启动时做微信静默登录，换取 token
+    login().catch(() => {
+      // 登录失败由后续接口请求重试
+    })
   },
-  onShow: function () {
-    console.log('App Show')
-  },
-  onHide: function () {
-    console.log('App Hide')
-  },
+  onShow: function () {},
+  onHide: function () {},
 }
 </script>
 

@@ -1,9 +1,13 @@
 // 工时打卡核心工具函数
 
-const STORAGE_KEY = 'worklog_records'
-const SETTINGS_KEY = 'worklog_settings'
+import { RecordApi, SettingsApi, DueOverrideApi } from './api.js'
+
 const ADJUST_KEY = 'worklog_adjust'
-const DUE_OVERRIDE_KEY = 'worklog_due_override'
+
+// ---------- 后端数据缓存（内存态，页面加载时由 api 拉取）----------
+let recordsCache = {} // { 'YYYY-MM-DD': record }
+let settingsCache = { standardHours: 8, lunchHours: 1, goalHours: 10 }
+let dueOverrideCache = {} // { 'YYYY-MM': '21' }
 
 // ---------- 调休配置 ----------
 // 内置国定节假日表（依据国务院办公厅《关于2026年部分节假日安排的通知》）
@@ -92,22 +96,38 @@ export function calcDueDays(year, month) {
   return due
 }
 
-// 读取某月手动覆盖的应出勤天数（无覆盖返回空字符串）
-export function getDueOverride(year, month) {
-  const map = uni.getStorageSync(DUE_OVERRIDE_KEY) || {}
-  return map[`${year}-${month}`] || ''
+// 读取某月手动覆盖的应出勤天数（从后端读取，返回 '' 表示无覆盖）
+export async function loadDueOverride(year, month) {
+  try {
+    const key = `${year}-${month}`
+    const res = await DueOverrideApi.get(year, month)
+    dueOverrideCache[key] =
+      res && (res.value || res.value === 0) ? res.value : ''
+  } catch (e) {
+    dueOverrideCache[`${year}-${month}`] = ''
+  }
+  return dueOverrideCache[`${year}-${month}`]
 }
 
-// 设置某月应出勤覆盖值（传空则清除覆盖）
-export function setDueOverride(year, month, value) {
-  const map = uni.getStorageSync(DUE_OVERRIDE_KEY) || {}
+// 读取某月手动覆盖值（同步读缓存）
+export function getDueOverride(year, month) {
+  return dueOverrideCache[`${year}-${month}`] || ''
+}
+
+// 设置某月应出勤覆盖值（传空则清除覆盖，与后端 PUT 同步）
+export async function setDueOverride(year, month, value) {
   const key = `${year}-${month}`
-  if (value === '' || value == null) {
-    delete map[key]
-  } else {
-    map[key] = String(value)
+  const finalValue = value === '' || value == null ? '' : String(value)
+  try {
+    await DueOverrideApi.save(year, month, finalValue)
+    if (finalValue === '') {
+      delete dueOverrideCache[key]
+    } else {
+      dueOverrideCache[key] = finalValue
+    }
+  } catch (e) {
+    uni.showToast({ title: '保存失败', icon: 'none' })
   }
-  uni.setStorageSync(DUE_OVERRIDE_KEY, map)
 }
 
 // 格式化日期为 YYYY-MM-DD
@@ -131,41 +151,69 @@ export function weekdayText(date = new Date()) {
   return '星期' + week[date.getDay()]
 }
 
-// 读取全部打卡记录 { '2026-11-10': {...}, ... }
+// 读取全部打卡记录（内存缓存）
 export function getAllRecords() {
-  const data = uni.getStorageSync(STORAGE_KEY)
-  return data || {}
+  return { ...recordsCache }
 }
 
-// 保存全部记录
-function saveRecords(records) {
-  uni.setStorageSync(STORAGE_KEY, records)
-}
-
-// 获取某天记录
+// 获取某天记录（同步读缓存）
 export function getRecord(dateStr) {
-  return getAllRecords()[dateStr] || null
+  return recordsCache[dateStr] || null
 }
 
-// 保存当天记录
-export function saveRecord(dateStr, record) {
-  const records = getAllRecords()
-  records[dateStr] = record
-  saveRecords(records)
+// 从后端拉取某月考勤记录，更新缓存并返回该月记录数组（倒序）
+export async function loadMonthRecords(year, month) {
+  const key = `${year}-${String(month).padStart(2, '0')}-`
+  try {
+    const res = await RecordApi.getByMonth(year, month)
+    const map = res && res.records ? res.records : {}
+    // 先清掉该月旧缓存，再并入本次结果
+    Object.keys(recordsCache).forEach((k) => {
+      if (k.startsWith(key)) delete recordsCache[k]
+    })
+    Object.assign(recordsCache, map)
+  } catch (e) {
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  }
+  return getMonthRecords(year, month)
+}
+
+// 保存当天记录（新增、编辑均走此接口，按 date 覆盖）
+export async function saveRecord(dateStr, record) {
+  try {
+    await RecordApi.save(dateStr, record)
+    recordsCache[dateStr] = record
+  } catch (e) {
+    uni.showToast({ title: '保存失败', icon: 'none' })
+  }
+}
+
+// 删除某天记录
+export async function deleteRecord(dateStr) {
+  try {
+    await RecordApi.remove(dateStr)
+    if (recordsCache[dateStr]) {
+      delete recordsCache[dateStr]
+    }
+    return true
+  } catch (e) {
+    uni.showToast({ title: '删除失败', icon: 'none' })
+    return false
+  }
 }
 
 // 打卡动作（type: 'on' | 'off'）返回新记录
-export function punch(type, date = new Date()) {
+export async function punch(type, date = new Date()) {
   const dateStr = formatDate(date)
   const time = formatTime(date)
-  let record = getRecord(dateStr) || { onDutyTime: '', offDutyTime: '' }
+  let record = recordsCache[dateStr] || { onDutyTime: '', offDutyTime: '' }
   if (type === 'on') {
     record.onDutyTime = time
   } else {
     record.offDutyTime = time
   }
   record.workHours = calcWorkHours(record.onDutyTime, record.offDutyTime)
-  saveRecord(dateStr, record)
+  await saveRecord(dateStr, record)
   return record
 }
 
@@ -189,25 +237,50 @@ export function calcWorkHours(onTime, offTime, fullDay = true) {
   return Math.max(minutes / 60, 0)
 }
 
-// 读取设置
+// 从后端拉取设置，更新缓存
+export async function loadSettings() {
+  try {
+    const res = await SettingsApi.get()
+    settingsCache = Object.assign(
+      { standardHours: 8, lunchHours: 1, goalHours: 10 },
+      res || {},
+    )
+  } catch (e) {
+    settingsCache = { standardHours: 8, lunchHours: 1, goalHours: 10 }
+  }
+  return settingsCache
+}
+
+// 读取设置（同步读缓存）
 export function getSettings() {
-  const data = uni.getStorageSync(SETTINGS_KEY)
-  return Object.assign({ standardHours: 8, lunchHours: 1, goalHours: 10 }, data)
+  return { ...settingsCache }
 }
 
-// 保存设置
-export function saveSettings(settings) {
-  uni.setStorageSync(SETTINGS_KEY, settings)
+// 保存设置（与后端同步）
+export async function saveSettings(settings) {
+  const next = Object.assign(
+    { standardHours: 8, lunchHours: 1, goalHours: 10 },
+    settings,
+  )
+  try {
+    await SettingsApi.save({
+      standardHours: next.standardHours,
+      lunchHours: next.lunchHours,
+      goalHours: next.goalHours,
+    })
+    settingsCache = next
+  } catch (e) {
+    uni.showToast({ title: '保存失败', icon: 'none' })
+  }
 }
 
-// 由月份得到当月有记录的日期列表（倒序）
+// 由月份得到当月有记录的日期列表（倒序，同步读缓存）
 export function getMonthRecords(year, month) {
-  const records = getAllRecords()
   const prefix = `${year}-${String(month).padStart(2, '0')}-`
   const result = []
-  Object.keys(records).forEach((key) => {
+  Object.keys(recordsCache).forEach((key) => {
     if (key.startsWith(prefix)) {
-      result.push(Object.assign({ date: key }, records[key]))
+      result.push(Object.assign({ date: key }, recordsCache[key]))
     }
   })
   result.sort((a, b) => (a.date < b.date ? 1 : -1))

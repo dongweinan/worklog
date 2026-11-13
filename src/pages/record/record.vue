@@ -14,7 +14,12 @@
 
     <!-- 列表 -->
     <view class="list" v-if="list.length">
-      <view class="record-row" v-for="item in list" :key="item.date">
+      <view
+        class="record-row"
+        v-for="item in list"
+        :key="item.date"
+        @tap="openEdit(item)"
+      >
         <view class="row-date-col">
           <view class="row-date">{{ dayNum(item.date) }}</view>
           <view class="row-week" :class="{ weekend: isWeekend(item.date) }">
@@ -28,7 +33,10 @@
             <view class="dash"></view>
             <text class="t">{{ formatTimeStr(item.offDutyTime) }}</text>
           </view>
-          <view class="row-note" v-if="item.note">{{ item.note }}</view>
+          <view class="row-note" v-if="item.attendance !== undefined">
+            <text class="att-tag">{{ attText(item.attendance) }}</text>
+            <text v-if="item.note">{{ item.note }}</text>
+          </view>
         </view>
 
         <view class="row-hours" :class="{ met: Number(item.workHours) >= 8 }">
@@ -40,15 +48,100 @@
 
     <!-- 空状态 -->
     <view class="empty" v-else>
-      <view class="empty-line"></view>
+      <image
+        class="empty-icon"
+        src="/static/icons/calendar.png"
+        mode="aspectFit"
+      ></image>
       <view class="empty-text">本月还没有打卡记录</view>
       <view class="empty-sub">去打卡页记一笔吧</view>
+    </view>
+
+    <!-- 编辑弹层 -->
+    <view class="mask" v-if="showEdit" @tap="closeEdit">
+      <view class="edit-sheet" @tap.stop>
+        <view class="edit-head">
+          <text class="edit-title">编辑记录</text>
+          <text class="edit-date">{{ editForm.date }}</text>
+        </view>
+
+        <view class="edit-row">
+          <view class="edit-label-wrap">
+            <image
+              class="edit-icon"
+              src="/static/icons/signin.png"
+              mode="aspectFit"
+            ></image>
+            <text class="edit-label">上班时间</text>
+          </view>
+          <picker
+            mode="time"
+            :value="editForm.onDutyTime"
+            @change="onEditTime('onDutyTime', $event)"
+          >
+            <text class="edit-value">{{ editForm.onDutyTime }}</text>
+          </picker>
+        </view>
+        <view class="edit-row">
+          <view class="edit-label-wrap">
+            <image
+              class="edit-icon"
+              src="/static/icons/signout.png"
+              mode="aspectFit"
+            ></image>
+            <text class="edit-label">下班时间</text>
+          </view>
+          <picker
+            mode="time"
+            :value="editForm.offDutyTime"
+            @change="onEditTime('offDutyTime', $event)"
+          >
+            <text class="edit-value">{{ editForm.offDutyTime }}</text>
+          </picker>
+        </view>
+        <view class="edit-row">
+          <view class="edit-label-wrap">
+            <image
+              class="edit-icon"
+              src="/static/icons/calendar-check.png"
+              mode="aspectFit"
+            ></image>
+            <text class="edit-label">出勤天数</text>
+          </view>
+          <picker
+            :range="attendanceOptions"
+            :value="editAttendanceIndex"
+            @change="onEditAttendance"
+          >
+            <text class="edit-value">{{ editAttendanceText }}</text>
+          </picker>
+        </view>
+
+        <view class="edit-work">
+          重算工时
+          <text class="ew-num">{{ editWorkHours }}</text>
+          小时
+        </view>
+
+        <view class="edit-actions">
+          <view class="edit-btn danger" @tap="deleteEdit">删除</view>
+          <view class="edit-btn primary" @tap="saveEdit">保存</view>
+        </view>
+      </view>
     </view>
   </view>
 </template>
 
 <script>
-import { getMonthRecords } from '@/utils/worklog.js'
+import {
+  getMonthRecords,
+  loadMonthRecords,
+  getSettings,
+  loadSettings,
+  calcWorkHours,
+  saveRecord,
+  deleteRecord,
+} from '@/utils/worklog.js'
 
 export default {
   data() {
@@ -57,6 +150,15 @@ export default {
       year: now.getFullYear(),
       month: now.getMonth() + 1,
       list: [],
+      attendanceOptions: ['加班', '半天', '全天'],
+      showEdit: false,
+      editForm: {
+        date: '',
+        onDutyTime: '',
+        offDutyTime: '',
+      },
+      editAttendanceIndex: 2,
+      editStandard: 8,
     }
   },
   computed: {
@@ -70,16 +172,28 @@ export default {
         (this.year === now.getFullYear() && this.month >= 1)
       )
     },
-  },
-  onLoad() {
-    this.load()
+    editAttendanceText() {
+      return this.attendanceOptions[this.editAttendanceIndex]
+    },
+    editWorkHours() {
+      const att = [0, 0.5, 1][this.editAttendanceIndex]
+      const fullDay = att === 1
+      return calcWorkHours(
+        this.editForm.onDutyTime,
+        this.editForm.offDutyTime,
+        fullDay,
+      ).toFixed(1)
+    },
   },
   onShow() {
     this.load()
   },
   methods: {
-    load() {
+    async load() {
+      await loadMonthRecords(this.year, this.month)
+      await loadSettings()
       this.list = getMonthRecords(this.year, this.month)
+      this.editStandard = getSettings().standardHours || 8
     },
     changeMonth(delta) {
       let m = this.month + delta
@@ -103,6 +217,50 @@ export default {
       this.month = m
       this.load()
     },
+    openEdit(item) {
+      this.editForm.date = item.date
+      this.editForm.onDutyTime = item.onDutyTime || '09:00'
+      this.editForm.offDutyTime = item.offDutyTime || '18:00'
+      const a = item.attendance
+      if (a === 0) this.editAttendanceIndex = 0
+      else if (a === 0.5) this.editAttendanceIndex = 1
+      else this.editAttendanceIndex = 2
+      this.showEdit = true
+    },
+    closeEdit() {
+      this.showEdit = false
+    },
+    onEditTime(field, e) {
+      this.editForm[field] = e.detail.value
+    },
+    onEditAttendance(e) {
+      this.editAttendanceIndex = Number(e.detail.value)
+    },
+    async saveEdit() {
+      const attendance = [0, 0.5, 1][this.editAttendanceIndex]
+      const fullDay = attendance === 1
+      const record = {
+        onDutyTime: this.editForm.onDutyTime,
+        offDutyTime: this.editForm.offDutyTime,
+        attendance,
+        workHours: calcWorkHours(
+          this.editForm.onDutyTime,
+          this.editForm.offDutyTime,
+          fullDay,
+        ),
+        note: '',
+      }
+      await saveRecord(this.editForm.date, record)
+      this.showEdit = false
+      await this.load()
+      uni.showToast({ title: '已保存', icon: 'success' })
+    },
+    async deleteEdit() {
+      await deleteRecord(this.editForm.date)
+      this.showEdit = false
+      await this.load()
+      uni.showToast({ title: '已删除', icon: 'success' })
+    },
     dayNum(dateStr) {
       return Number(dateStr.split('-')[2])
     },
@@ -120,6 +278,11 @@ export default {
     },
     formatTimeStr(t) {
       return t || '--:--'
+    },
+    attText(a) {
+      if (a === 0) return '加班'
+      if (a === 0.5) return '半天'
+      return '全天'
     },
   },
 }
@@ -243,24 +406,126 @@ export default {
 
 /* 空状态 */
 .empty {
-  padding-top: 180rpx;
+  padding-top: 160rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
-.empty-line {
-  width: 2rpx;
-  height: 90rpx;
-  background: #d1d1db;
+.empty-icon {
+  width: 96rpx;
+  height: 96rpx;
+  opacity: 0.45;
 }
 .empty-text {
   font-size: 27rpx;
   color: #5a6b7c;
-  margin-top: 36rpx;
+  margin-top: 16rpx;
 }
 .empty-sub {
   font-size: 23rpx;
   color: #aeaeb2;
   margin-top: 12rpx;
+}
+
+/* 出勤类型标签 */
+.att-tag {
+  display: inline-block;
+  font-size: 19rpx;
+  color: #007aff;
+  background: rgba(0, 122, 255, 0.1);
+  border-radius: 8rpx;
+  padding: 2rpx 12rpx;
+  margin-right: 12rpx;
+}
+
+/* 编辑弹层 */
+.mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 30, 50, 0.4);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+}
+.edit-sheet {
+  width: 100%;
+  background: #f7f8fb;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 40rpx 40rpx 48rpx;
+  box-sizing: border-box;
+}
+.edit-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 30rpx;
+}
+.edit-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #111111;
+}
+.edit-date {
+  font-size: 26rpx;
+  color: #8e8e93;
+}
+.edit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 16rpx;
+  padding: 26rpx 26rpx;
+  margin-bottom: 18rpx;
+}
+.edit-label {
+  font-size: 27rpx;
+  color: #5a6b7c;
+}
+.edit-label-wrap {
+  display: flex;
+  align-items: center;
+}
+.edit-icon {
+  width: 34rpx;
+  height: 34rpx;
+  margin-right: 12rpx;
+}
+.edit-value {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #007aff;
+}
+.edit-work {
+  text-align: center;
+  font-size: 24rpx;
+  color: #8e8e93;
+  padding: 16rpx 0 26rpx;
+}
+.ew-num {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #111111;
+  margin: 0 10rpx;
+}
+.edit-actions {
+  display: flex;
+  gap: 20rpx;
+}
+.edit-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 30rpx;
+  font-weight: 600;
+  border-radius: 18rpx;
+  padding: 24rpx 0;
+}
+.edit-btn.primary {
+  background: #007aff;
+  color: #ffffff;
+}
+.edit-btn.danger {
+  background: rgba(255, 59, 48, 0.12);
+  color: #ff3b30;
 }
 </style>

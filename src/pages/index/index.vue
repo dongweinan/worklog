@@ -9,6 +9,11 @@
       <view class="overview-grid">
         <view class="overview-cell">
           <view class="overview-cell-inner">
+            <image
+              class="ov-icon"
+              src="/static/icons/calendar.png"
+              mode="aspectFit"
+            ></image>
             <text class="ov-value">{{ dueDays }}</text>
             <text class="ov-label">应出勤天数</text>
           </view>
@@ -16,6 +21,11 @@
 
         <view class="overview-cell">
           <view class="overview-cell-inner">
+            <image
+              class="ov-icon"
+              src="/static/icons/calendar-check.png"
+              mode="aspectFit"
+            ></image>
             <text class="ov-value">{{ days }}</text>
             <text class="ov-label">实际出勤</text>
           </view>
@@ -23,24 +33,44 @@
 
         <view class="overview-cell">
           <view class="overview-cell-inner">
+            <image
+              class="ov-icon"
+              src="/static/icons/clock.png"
+              mode="aspectFit"
+            ></image>
             <text class="ov-value">{{ totalHours }}</text>
             <text class="ov-label">累计工时</text>
           </view>
         </view>
         <view class="overview-cell">
           <view class="overview-cell-inner">
+            <image
+              class="ov-icon"
+              src="/static/icons/bolt.png"
+              mode="aspectFit"
+            ></image>
             <text class="ov-value">{{ overtimeText }}</text>
             <text class="ov-label">加班总时长</text>
           </view>
         </view>
         <view class="overview-cell">
           <view class="overview-cell-inner">
+            <image
+              class="ov-icon"
+              src="/static/icons/gauge.png"
+              mode="aspectFit"
+            ></image>
             <text class="ov-value">{{ avgHours }}</text>
             <text class="ov-label">平均工时</text>
           </view>
         </view>
         <view class="overview-cell">
           <view class="overview-cell-inner">
+            <image
+              class="ov-icon"
+              src="/static/icons/target.png"
+              mode="aspectFit"
+            ></image>
             <text class="ov-value">{{ needHours }}</text>
             <text class="ov-label">达标需补工时</text>
           </view>
@@ -52,13 +82,27 @@
     <view class="glass-card">
       <text class="glass-title">添加考勤记录</text>
       <view class="add-row">
-        <text class="add-label">日期</text>
+        <view class="add-label-wrap">
+          <image
+            class="add-icon"
+            src="/static/icons/calendar.png"
+            mode="aspectFit"
+          ></image>
+          <text class="add-label">日期</text>
+        </view>
         <picker mode="date" :value="form.date" @change="onDateChange">
           <text class="add-value">{{ form.date }}</text>
         </picker>
       </view>
       <view class="add-row">
-        <text class="add-label">上班时间</text>
+        <view class="add-label-wrap">
+          <image
+            class="add-icon"
+            src="/static/icons/signin.png"
+            mode="aspectFit"
+          ></image>
+          <text class="add-label">上班时间</text>
+        </view>
         <picker
           mode="time"
           :value="form.onDutyTime"
@@ -68,7 +112,14 @@
         </picker>
       </view>
       <view class="add-row">
-        <text class="add-label">下班时间</text>
+        <view class="add-label-wrap">
+          <image
+            class="add-icon"
+            src="/static/icons/signout.png"
+            mode="aspectFit"
+          ></image>
+          <text class="add-label">下班时间</text>
+        </view>
         <picker
           mode="time"
           :value="form.offDutyTime"
@@ -78,7 +129,14 @@
         </picker>
       </view>
       <view class="add-row">
-        <text class="add-label">出勤天数</text>
+        <view class="add-label-wrap">
+          <image
+            class="add-icon"
+            src="/static/icons/calendar-check.png"
+            mode="aspectFit"
+          ></image>
+          <text class="add-label">出勤天数</text>
+        </view>
         <picker
           :range="attendanceOptions"
           :value="attendanceIndex"
@@ -131,11 +189,14 @@ import {
   formatDate,
   getRecord,
   getMonthRecords,
-  getAllRecords,
+  loadMonthRecords,
   getSettings,
+  loadSettings,
   calcDueDays,
   getDueOverride,
+  loadDueOverride,
   calcWorkHours,
+  saveRecord,
 } from '@/utils/worklog.js'
 
 export default {
@@ -228,18 +289,21 @@ export default {
   onLoad() {
     this.standardHours = getSettings().standardHours || 8
     this.goalHours = getSettings().goalHours || 10
-    this.refresh()
   },
-  onShow() {
+  async onShow() {
+    await loadSettings()
+    this.standardHours = getSettings().standardHours || 8
     this.goalHours = getSettings().goalHours || 10
-    this.refresh()
+    await this.refresh()
   },
   methods: {
     goRecord() {
       // 记录页是 tabBar 页面，需用 switchTab 跳转
       uni.switchTab({ url: '/pages/record/record' })
     },
-    refresh() {
+    async refresh() {
+      await loadMonthRecords(this.year, this.month)
+      await loadDueOverride(this.year, this.month)
       this.list = getMonthRecords(this.year, this.month)
       this.dueOverride = getDueOverride(this.year, this.month)
     },
@@ -261,7 +325,7 @@ export default {
       else if (r && r.attendance === 0.5) this.attendanceIndex = 1
       else this.attendanceIndex = 2
     },
-    saveEntry() {
+    async saveEntry() {
       const attendance = [0, 0.5, 1][this.attendanceIndex]
       const fullDay = attendance === 1
       const record = {
@@ -273,14 +337,12 @@ export default {
           this.form.offDutyTime,
           fullDay,
         ),
+        note: '',
       }
-      uni.setStorageSync('worklog_records', {
-        ...getAllRecords(),
-        [this.form.date]: record,
-      })
+      await saveRecord(this.form.date, record)
       this.form.date = formatDate()
       this.applyRecordToForm()
-      this.refresh()
+      await this.refresh()
       uni.showToast({ title: '已保存', icon: 'success' })
     },
     dayNum(dateStr) {
@@ -371,6 +433,12 @@ export default {
   padding: 18rpx 8rpx 16rpx;
   text-align: center;
 }
+.ov-icon {
+  display: block;
+  width: 44rpx;
+  height: 44rpx;
+  margin: 0 auto 10rpx;
+}
 .ov-value {
   display: block;
   font-size: 40rpx;
@@ -394,6 +462,15 @@ export default {
   justify-content: space-between;
   padding: 26rpx 4rpx;
   border-bottom: 0.5rpx solid rgba(180, 190, 210, 0.3);
+}
+.add-label-wrap {
+  display: flex;
+  align-items: center;
+}
+.add-icon {
+  width: 34rpx;
+  height: 34rpx;
+  margin-right: 12rpx;
 }
 .add-label {
   font-size: 26rpx;
